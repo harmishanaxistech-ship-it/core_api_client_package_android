@@ -1,11 +1,9 @@
-// Logging interceptor for request/response debugging with truncation & redaction options.
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
 
 /// LoggingInterceptor prints structured, human-friendly API request/response
-/// logs using dart:developer.log. It supports truncating large bodies and
-/// redacting sensitive headers (Authorization, Cookie).
+/// logs using print() for better visibility in the debug console.
 class LoggingInterceptor extends Interceptor {
   final bool enabled;
   final int maxBodyChars;
@@ -67,8 +65,11 @@ class LoggingInterceptor extends Interceptor {
     return out;
   }
 
-  void _log(String message, {Object? error, StackTrace? stackTrace}) {
-    developer.log(message, name: 'ApiLogger', error: error, stackTrace: stackTrace);
+  void _printLog(String text) {
+    // Using print instead of developer.log to match requested format exactly
+    for (var line in text.split('\n')) {
+      print(line);
+    }
   }
 
   @override
@@ -117,7 +118,7 @@ class LoggingInterceptor extends Interceptor {
     buffer.writeln('');
     buffer.writeln('====================================================');
 
-    _log(buffer.toString());
+    _printLog(buffer.toString());
     handler.next(options);
   }
 
@@ -156,7 +157,7 @@ class LoggingInterceptor extends Interceptor {
     buffer.writeln('');
     buffer.writeln('====================================================');
 
-    _log(buffer.toString());
+    _printLog(buffer.toString());
     handler.next(response);
   }
 
@@ -199,7 +200,7 @@ class LoggingInterceptor extends Interceptor {
     buffer.writeln('');
     buffer.writeln('====================================================');
 
-    _log(buffer.toString(), error: err);
+    _printLog(buffer.toString());
     handler.next(err);
   }
 }
