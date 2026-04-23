@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:meta/meta.dart';
 import '../models/api_response.dart';
 import '../exceptions/api_exception.dart';
 import 'network_config.dart';
@@ -25,6 +26,60 @@ class ApiClient {
   Completer<bool>? _refreshCompleter;
 
   ApiClient._(this._dio, {void Function(ApiException)? onError, Future<bool> Function(Dio)? refreshTokenHandler}) : _onErrorCallback = onError, _refreshTokenHandler = refreshTokenHandler {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (err, handler) async {
+        try {
+          final status = err.response?.statusCode;
+          if (status == 401 && _refreshTokenHandler != null) {
+            final options = err.requestOptions;
+            final alreadyRetried = options.extra['retried_with_refresh'] as bool? ?? false;
+            if (!alreadyRetried) {
+              if (_refreshCompleter != null) {
+                try {
+                  await _refreshCompleter!.future;
+                } catch (_) {}
+              } else {
+                _refreshCompleter = Completer<bool>();
+                final localCompleter = _refreshCompleter;
+                try {
+                  final refreshDio = Dio(BaseOptions(baseUrl: _dio.options.baseUrl));
+                  final refreshHandler = _refreshTokenHandler;
+                  final refreshed = await refreshHandler(refreshDio);
+                  localCompleter?.complete(refreshed);
+                } catch (e) {
+                  localCompleter?.complete(false);
+                }
+                _refreshCompleter = null;
+              }
+
+              final opts = err.requestOptions;
+              opts.extra['retried_with_refresh'] = true;
+              opts.headers.remove('Authorization');
+              try {
+                final response = await _dio.fetch(opts);
+                return handler.resolve(response);
+              } catch (e) {}
+            }
+          }
+        } catch (_) {}
+
+        final apiEx = ApiException.fromDio(err);
+        if (_onErrorCallback != null) {
+          try {
+            _onErrorCallback(apiEx);
+          } catch (_) {}
+        }
+        handler.next(err);
+      },
+    ));
+  }
+
+  /// Internal constructor for testing.
+  @visibleForTesting
+  ApiClient.forTest(Dio dio, {Future<bool> Function(Dio)? refreshTokenHandler, void Function(ApiException)? onError})
+      : _dio = dio,
+        _onErrorCallback = onError,
+        _refreshTokenHandler = refreshTokenHandler {
     _dio.interceptors.add(InterceptorsWrapper(
       onError: (err, handler) async {
         try {

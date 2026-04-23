@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
-import 'package:core_api_client_package/core_api_client_package.dart';
+import 'package:core_api_client/core_api_client.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,7 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
-import 'package:core_api_client_package/core_api_client_package.dart';
+import 'package:core_api_client/core_api_client.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +43,7 @@ class _ConsumerHomeState extends State<ConsumerHome> {
 
   Future<void> _fetchTodo() async {
     setState(() => _output = 'Loading...');
-    final res = await ApiClient.instance.get<Map<String, dynamic>>('/todos/1');
+    final res = await ApiClient.instance.get<Map<String, dynamic>>(url: '/todos/1');
     if (res.success) {
       developer.log('Fetched todo', name: 'consumer');
       setState(() => _output = res.data.toString());

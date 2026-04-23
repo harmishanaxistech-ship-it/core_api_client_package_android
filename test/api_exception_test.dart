@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
-import 'package:core_api_client_package/core/exceptions/api_exception.dart';
+import 'package:core_api_client/core/exceptions/api_exception.dart';
 
 void main() {
   test('ApiException.fromDio maps response and message', () {
