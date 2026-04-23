@@ -1,5 +1,6 @@
 // ApiClient: a singleton wrapper around Dio providing typed request methods,
 // interceptors, timeout, retry, and file upload support.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -21,10 +22,10 @@ class ApiClient {
   // Note: _errorController is only created when requested via errorStream getter
   Stream<ApiException>? _errorStream;
 
-  final Future<bool> Function()? _refreshTokenHandler;
+  final Future<bool> Function(Dio)? _refreshTokenHandler;
   Completer<bool>? _refreshCompleter;
 
-  ApiClient._(this._dio, {void Function(ApiException)? onError, Future<bool> Function()? refreshTokenHandler}) : _onErrorCallback = onError, _refreshTokenHandler = refreshTokenHandler {
+  ApiClient._(this._dio, {void Function(ApiException)? onError, Future<bool> Function(Dio)? refreshTokenHandler}) : _onErrorCallback = onError, _refreshTokenHandler = refreshTokenHandler {
     // Attach an interceptor to handle 401 refresh, convert Dio errors into ApiException and notify
     _dio.interceptors.add(InterceptorsWrapper(
       onError: (err, handler) async {
@@ -42,11 +43,14 @@ class ApiClient {
                 } catch (_) {}
               } else {
                 _refreshCompleter = Completer<bool>();
+                final localCompleter = _refreshCompleter;
                 try {
-                  final refreshed = await _refreshTokenHandler!();
-                  _refreshCompleter!.complete(refreshed);
+                  final refreshDio = Dio(BaseOptions(baseUrl: _dio.options.baseUrl));
+                  final refreshHandler = _refreshTokenHandler;
+                  final refreshed = await refreshHandler(refreshDio);
+                  localCompleter?.complete(refreshed);
                 } catch (e) {
-                  _refreshCompleter!.complete(false);
+                  localCompleter?.complete(false);
                 }
                 // clear completer after completion
                 final tmp = _refreshCompleter;
@@ -78,7 +82,7 @@ class ApiClient {
         final apiEx = ApiException.fromDio(err);
         if (_onErrorCallback != null) {
           try {
-            _onErrorCallback!(apiEx);
+            _onErrorCallback(apiEx);
           } catch (_) {}
         }
         handler.next(err);
@@ -88,7 +92,7 @@ class ApiClient {
 
   /// Initialize the singleton with [config] and optional token provider.
   /// If called multiple times, re-configures the singleton.
-  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false, void Function(ApiException)? onError, Future<bool> Function()? refreshTokenHandler}) {
+  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false, void Function(ApiException)? onError, Future<bool> Function(Dio)? refreshTokenHandler}) {
     final dio = Dio(BaseOptions(baseUrl: config.baseUrl, headers: config.defaultHeaders));
     dio.options.connectTimeout = config.timeout;
     dio.options.receiveTimeout = config.timeout;
@@ -102,6 +106,12 @@ class ApiClient {
     dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: config.maxRetries));
 
     _instance = ApiClient._(dio, onError: onError, refreshTokenHandler: refreshTokenHandler);
+  }
+
+  /// Testing helper: create ApiClient with injected Dio and optional handlers.
+  /// Useful for unit tests to avoid building an internal Dio instance.
+  factory ApiClient.forTest(Dio dio, {void Function(ApiException)? onError, Future<bool> Function(Dio)? refreshTokenHandler}) {
+    return ApiClient._(dio, onError: onError, refreshTokenHandler: refreshTokenHandler);
   }
 
   /// Access the singleton. Throws if initialize wasn't called.
