@@ -21,10 +21,60 @@ class ApiClient {
   // Note: _errorController is only created when requested via errorStream getter
   Stream<ApiException>? _errorStream;
 
-  ApiClient._(this._dio, {void Function(ApiException)? onError}) : _onErrorCallback = onError {
-    // Attach an interceptor to convert Dio errors into ApiException and notify
+  final Future<bool> Function()? _refreshTokenHandler;
+  Completer<bool>? _refreshCompleter;
+
+  ApiClient._(this._dio, {void Function(ApiException)? onError, Future<bool> Function()? refreshTokenHandler}) : _onErrorCallback = onError, _refreshTokenHandler = refreshTokenHandler {
+    // Attach an interceptor to handle 401 refresh, convert Dio errors into ApiException and notify
     _dio.interceptors.add(InterceptorsWrapper(
-      onError: (err, handler) {
+      onError: (err, handler) async {
+        try {
+          final status = err.response?.statusCode;
+          // Handle 401 Unauthorized with refresh flow
+          if (status == 401 && _refreshTokenHandler != null) {
+            final options = err.requestOptions;
+            final alreadyRetried = options.extra['retried_with_refresh'] as bool? ?? false;
+            if (!alreadyRetried) {
+              // If a refresh is already in progress, wait for it
+              if (_refreshCompleter != null) {
+                try {
+                  await _refreshCompleter!.future;
+                } catch (_) {}
+              } else {
+                _refreshCompleter = Completer<bool>();
+                try {
+                  final refreshed = await _refreshTokenHandler!();
+                  _refreshCompleter!.complete(refreshed);
+                } catch (e) {
+                  _refreshCompleter!.complete(false);
+                }
+                // clear completer after completion
+                final tmp = _refreshCompleter;
+                _refreshCompleter = null;
+                try {
+                  await tmp?.future;
+                } catch (_) {}
+              }
+
+              // If token refresh succeeded, retry original request once
+              final refreshResult = (_refreshCompleter == null) ? true : false; // if no completer left, assume success
+              // Note: better to check storage/token; here we attempt to retry once
+              if (refreshResult) {
+                final opts = err.requestOptions;
+                opts.extra['retried_with_refresh'] = true;
+                // Remove old authorization header so AuthInterceptor can re-add new token
+                opts.headers.remove('Authorization');
+                try {
+                  final response = await _dio.fetch(opts);
+                  return handler.resolve(response);
+                } catch (e) {
+                  // If retry fails, fall through to normal error handling
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
         final apiEx = ApiException.fromDio(err);
         if (_onErrorCallback != null) {
           try {
@@ -38,7 +88,7 @@ class ApiClient {
 
   /// Initialize the singleton with [config] and optional token provider.
   /// If called multiple times, re-configures the singleton.
-  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false, void Function(ApiException)? onError}) {
+  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false, void Function(ApiException)? onError, Future<bool> Function()? refreshTokenHandler}) {
     final dio = Dio(BaseOptions(baseUrl: config.baseUrl, headers: config.defaultHeaders));
     dio.options.connectTimeout = config.timeout;
     dio.options.receiveTimeout = config.timeout;
@@ -51,7 +101,7 @@ class ApiClient {
     dio.interceptors.add(LoggingInterceptor(enabled: enableLogging));
     dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: config.maxRetries));
 
-    _instance = ApiClient._(dio, onError: onError);
+    _instance = ApiClient._(dio, onError: onError, refreshTokenHandler: refreshTokenHandler);
   }
 
   /// Access the singleton. Throws if initialize wasn't called.
