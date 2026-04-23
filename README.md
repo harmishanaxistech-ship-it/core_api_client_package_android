@@ -54,6 +54,57 @@ See `example/lib/main.dart` for a simple example showing:
 - Logging uses `dart:developer.log` for safer production logging
 - Keep retry counts and timeouts conservative in production
 
+## Logging options (truncate & redact)
+
+The LoggingInterceptor prints pretty JSON by default. To avoid printing very large bodies or sensitive headers (Authorization, Cookie), use these patterns:
+
+1) Truncate large bodies
+
+- Add a simple helper to the interceptor to truncate stringified bodies:
+
+```dart
+const int _maxBodyChars = 10240; // 10 KB
+String _shorten(String s) {
+  if (s.length <= _maxBodyChars) return s;
+  return s.substring(0, _maxBodyChars) + '\n... (truncated, ${s.length} bytes)';
+}
+```
+
+- Use `_shorten(_prettyJson(body))` when writing BODY to the log.
+
+2) Redact sensitive headers
+
+- Provide a set of headers to redact and replace their values with `"<REDACTED>"`:
+
+```dart
+final _sensitiveHeaders = {'authorization', 'cookie', 'set-cookie'};
+Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
+  final out = <String, dynamic>{};
+  headers.forEach((k, v) {
+    if (_sensitiveHeaders.contains(k.toLowerCase())) {
+      out[k] = '<REDACTED>';
+    } else {
+      out[k] = v;
+    }
+  });
+  return out;
+}
+```
+
+- Call `_redactHeaders(_normalizeHeaders(options.headers))` before pretty printing.
+
+3) Configuration
+
+- To expose truncation/redaction as options, add constructor parameters to `LoggingInterceptor`:
+
+```dart
+LoggingInterceptor({this.enabled = true, this.maxBodyChars = 10240, this.redactHeaders = true});
+```
+
+Then apply the logic above using the instance fields.
+
+---
+
 ## License
 
 MIT
