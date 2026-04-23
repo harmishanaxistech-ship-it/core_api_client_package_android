@@ -15,12 +15,30 @@ class ApiClient {
   static ApiClient? _instance;
 
   final Dio _dio;
+  // Optional global error callback
+  final void Function(ApiException)? _onErrorCallback;
+  // Simple broadcast stream for errors
+  // Note: _errorController is only created when requested via errorStream getter
+  Stream<ApiException>? _errorStream;
 
-  ApiClient._(this._dio);
+  ApiClient._(this._dio, {void Function(ApiException)? onError}) : _onErrorCallback = onError {
+    // Attach an interceptor to convert Dio errors into ApiException and notify
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (err, handler) {
+        final apiEx = ApiException.fromDio(err);
+        if (_onErrorCallback != null) {
+          try {
+            _onErrorCallback!(apiEx);
+          } catch (_) {}
+        }
+        handler.next(err);
+      },
+    ));
+  }
 
   /// Initialize the singleton with [config] and optional token provider.
   /// If called multiple times, re-configures the singleton.
-  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false}) {
+  static void initialize({required NetworkConfig config, TokenProvider? tokenProvider, bool enableLogging = false, void Function(ApiException)? onError}) {
     final dio = Dio(BaseOptions(baseUrl: config.baseUrl, headers: config.defaultHeaders));
     dio.options.connectTimeout = config.timeout;
     dio.options.receiveTimeout = config.timeout;
@@ -33,7 +51,7 @@ class ApiClient {
     dio.interceptors.add(LoggingInterceptor(enabled: enableLogging));
     dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: config.maxRetries));
 
-    _instance = ApiClient._(dio);
+    _instance = ApiClient._(dio, onError: onError);
   }
 
   /// Access the singleton. Throws if initialize wasn't called.
@@ -45,6 +63,25 @@ class ApiClient {
   }
 
   Dio get dio => _dio;
+
+  /// Optional error stream — create lazily if consumer subscribes.
+  Stream<ApiException> get errorStream {
+    _errorStream ??= (() {
+      final controller = StreamController<ApiException>.broadcast();
+      // Add an interceptor to push errors to the stream
+      _dio.interceptors.add(InterceptorsWrapper(
+        onError: (err, handler) {
+          try {
+            final apiEx = ApiException.fromDio(err);
+            controller.add(apiEx);
+          } catch (_) {}
+          handler.next(err);
+        },
+      ));
+      return controller.stream;
+    })();
+    return _errorStream!;
+  }
 
   /// Perform a GET request.
   Future<ApiResponse<T>> get<T>(String path, {Map<String, dynamic>? queryParameters, Map<String, String>? headers}) async {
