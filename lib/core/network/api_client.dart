@@ -86,6 +86,39 @@ class ApiClient {
     }
   }
 
+  /// Generic request where [method] is a string such as 'GET', 'POST', 'PUT', 'DELETE', or 'PATCH'.
+  /// If [file] is provided and method is POST, uploadFile will be used.
+  Future<ApiResponse<T>> request<T>(String method, String path,
+      {dynamic body, Map<String, dynamic>? queryParameters, Map<String, String>? headers, File? file, String fieldName = 'file'}) async {
+    final m = method.toUpperCase();
+    try {
+      switch (m) {
+        case 'GET':
+          return await get<T>(path, queryParameters: queryParameters, headers: headers);
+        case 'POST':
+          if (file != null) {
+            return await uploadFile<T>(path, file, fieldName: fieldName, data: body is Map<String, dynamic> ? body : null, headers: headers);
+          }
+          return await post<T>(path, body: body, queryParameters: queryParameters, headers: headers);
+        case 'PUT':
+          return await put<T>(path, body: body, queryParameters: queryParameters, headers: headers);
+        case 'DELETE':
+          return await delete<T>(path, queryParameters: queryParameters, headers: headers);
+        case 'PATCH':
+          try {
+            final response = await _dio.patch(path, data: body, queryParameters: queryParameters, options: Options(headers: headers));
+            return ApiResponse.success(response.data as T);
+          } on DioException catch (e) {
+            return ApiResponse.failure(ApiException.fromDio(e));
+          }
+        default:
+          return ApiResponse.failure(ApiException('Unsupported method: $method'));
+      }
+    } on DioException catch (e) {
+      return ApiResponse.failure(ApiException.fromDio(e));
+    }
+  }
+
   /// Upload a file with multipart/form-data.
   /// fieldName defaults to 'file'. Additional fields can be provided.
   Future<ApiResponse<T>> uploadFile<T>(
