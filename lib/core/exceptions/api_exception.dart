@@ -31,7 +31,9 @@ class ApiException implements Exception {
         if (details is Map && details['message'] != null) {
           msg = details['message'].toString();
         }
-      } catch (_) {}
+      } on Exception catch (_) {
+        // Ignored, fallback to default message
+      }
 
       if (status != null) {
         if (status >= 500) {

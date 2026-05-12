@@ -1,3 +1,9 @@
+## 1.1.1
+
+* Fixed `empty_catches` lint issues in `ApiClient` and `ApiException`.
+* Updated dependencies (`dio`, `meta`) and added `collection` to satisfy pub.dev analysis.
+* Improved error handling in `ApiClient` during token refresh.
+
 ## 1.1.0
 
 * Renamed package to `core_api_client`.

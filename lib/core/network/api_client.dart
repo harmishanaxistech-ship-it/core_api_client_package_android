@@ -37,7 +37,9 @@ class ApiClient {
               if (_refreshCompleter != null) {
                 try {
                   await _refreshCompleter!.future;
-                } catch (_) {}
+                } on Exception catch (_) {
+                  // Ignore
+                }
               } else {
                 _refreshCompleter = Completer<bool>();
                 final localCompleter = _refreshCompleter;
@@ -58,16 +60,22 @@ class ApiClient {
               try {
                 final response = await _dio.fetch(opts);
                 return handler.resolve(response);
-              } catch (e) {}
+              } on Exception catch (_) {
+                // Ignore
+              }
             }
           }
-        } catch (_) {}
+        } on Exception catch (_) {
+          // Ignore
+        }
 
         final apiEx = ApiException.fromDio(err);
         if (_onErrorCallback != null) {
           try {
             _onErrorCallback(apiEx);
-          } catch (_) {}
+          } on Exception catch (_) {
+            // Ignore
+          }
         }
         handler.next(err);
       },
@@ -91,7 +99,9 @@ class ApiClient {
               if (_refreshCompleter != null) {
                 try {
                   await _refreshCompleter!.future;
-                } catch (_) {}
+                } on Exception catch (_) {
+                  // Ignore
+                }
               } else {
                 _refreshCompleter = Completer<bool>();
                 final localCompleter = _refreshCompleter;
@@ -112,16 +122,22 @@ class ApiClient {
               try {
                 final response = await _dio.fetch(opts);
                 return handler.resolve(response);
-              } catch (e) {}
+              } on Exception catch (_) {
+                // Ignore
+              }
             }
           }
-        } catch (_) {}
+        } on Exception catch (_) {
+          // Ignore
+        }
 
         final apiEx = ApiException.fromDio(err);
         if (_onErrorCallback != null) {
           try {
             _onErrorCallback(apiEx);
-          } catch (_) {}
+          } on Exception catch (_) {
+            // Ignore
+          }
         }
         handler.next(err);
       },
@@ -160,7 +176,9 @@ class ApiClient {
           try {
             final apiEx = ApiException.fromDio(err);
             controller.add(apiEx);
-          } catch (_) {}
+          } on Exception catch (_) {
+            // Ignore
+          }
           handler.next(err);
         },
       ));
